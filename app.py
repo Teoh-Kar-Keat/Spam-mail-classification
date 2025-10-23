@@ -16,7 +16,7 @@ sns.set(style="whitegrid")
 st.set_page_config(layout="wide")
 
 st.sidebar.title("HW3 Spam Classifier Demo")
-csv_path = st.sidebar.text_input("Dataset CSV", value="D:/test/HW3/sms_spam_clean.csv")
+csv_path = st.sidebar.text_input("Dataset CSV", value="sms_spam_clean.csv")
 models_dir = st.sidebar.text_input("Models dir", value="models")
 text_size = st.sidebar.number_input("Max text length (chars)", value=1000)
 seed = st.sidebar.number_input("Seed", value=42)
