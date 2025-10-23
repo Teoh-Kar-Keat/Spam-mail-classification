@@ -10,7 +10,7 @@ import os
 st.set_page_config(layout="wide")
 
 st.sidebar.title("HW3 Spam Classifier Demo")
-csv_path = st.sidebar.text_input("Dataset CSV", value="D:/test/HW3/sms_spam_clean.csv")
+csv_path = st.sidebar.text_input("Dataset CSV", value="sms_spam_clean.csv")
 label_col = st.sidebar.text_input("Label column", value="label")
 text_col = st.sidebar.text_input("Text column", value="text")
 models_dir = st.sidebar.text_input("Models dir", value="models")
