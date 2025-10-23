@@ -142,8 +142,9 @@ if df is not None:
     st.table(pd.DataFrame(list(mask_counts.items()), columns=['token','count']))
 
     st.subheader("Top tokens by class (approx)")
-    spam_texts = df[df[label_col].astype(str).str.lower().str.contains('spam')][text_col]
-    ham_texts = df[~df[label_col].astype(str).str.lower().str.contains('spam')][text_col]
+    # use validated column names
+    spam_texts = df[df[label_to_use].astype(str).str.lower().str.contains('spam')][text_to_use]
+    ham_texts = df[~df[label_to_use].astype(str).str.lower().str.contains('spam')][text_to_use]
     top_spam = dict(top_tokens(spam_texts, n=30))
     top_ham = dict(top_tokens(ham_texts, n=30))
     tokens = list(set(list(top_spam.keys()) + list(top_ham.keys())))
@@ -160,9 +161,9 @@ if df is not None:
 
     if model is not None:
         st.header('Model performance on a held-out subset')
-        # create a quick train/test split to evaluate
-        X = df[text_col].astype(str)
-        y = df[label_col].astype(str)
+        # create a quick train/test split to evaluate using validated columns
+        X = df[text_to_use].astype(str)
+        y = df[label_to_use].astype(str)
         try:
             from sklearn.model_selection import train_test_split
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=seed, stratify=y)
