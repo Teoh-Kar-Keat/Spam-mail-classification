@@ -69,7 +69,8 @@ if st.session_state.get('reload_requested'):
         pass
     # reset flag then rerun
     st.session_state.pop('reload_requested', None)
-    st.experimental_rerun()
+    # reload dataset into df without calling experimental_rerun (safer for hosted runtimes)
+    df = load_data(csv_path)
 
 st.title("HW3 — Spam classifier demo")
 st.markdown(f"**Using label column:** `{label_col}`  —  **text column:** `{text_col}`")
