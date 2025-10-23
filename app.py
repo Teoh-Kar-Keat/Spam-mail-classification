@@ -54,15 +54,22 @@ def sidebar_column_selector(df, key_prefix=""):
         cols = preferred_text_cols + preferred_label_cols
     label_choice = st.sidebar.selectbox("Label column", cols, index=cols.index('label') if 'label' in cols else 0, key=key_prefix+"_label")
     text_choice = st.sidebar.selectbox("Text column", cols, index=cols.index('text_clean') if 'text_clean' in cols else (cols.index('text') if 'text' in cols else 1), key=key_prefix+"_text")
+    # Do not call experimental_rerun directly inside helper — set a session flag instead
     if st.sidebar.button('Reload dataset'):
-        try:
-            st.cache_data.clear()
-        except Exception:
-            pass
-        st.experimental_rerun()
+        st.session_state['reload_requested'] = True
     return label_choice, text_choice
 
 label_col, text_col = sidebar_column_selector(df, key_prefix="main")
+
+# If reload was requested, clear caches and rerun from main flow
+if st.session_state.get('reload_requested'):
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
+    # reset flag then rerun
+    st.session_state.pop('reload_requested', None)
+    st.experimental_rerun()
 
 st.title("HW3 — Spam classifier demo")
 st.markdown(f"**Using label column:** `{label_col}`  —  **text column:** `{text_col}`")
