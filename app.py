@@ -15,41 +15,18 @@ from sklearn.metrics import (confusion_matrix, classification_report, roc_curve,
 sns.set(style="whitegrid")
 st.set_page_config(layout="wide")
 
-DEFAULT_CSV = "sms_spam_clean.csv"
-DEFAULT_MODELS = "models"
+st.sidebar.title("HW3 Spam Classifier Demo")
+csv_path = st.sidebar.text_input("Dataset CSV", value="sms_spam_clean.csv")
+models_dir = st.sidebar.text_input("Models dir", value="models")
+text_size = st.sidebar.number_input("Max text length (chars)", value=1000)
+seed = st.sidebar.number_input("Seed", value=42)
+threshold = st.sidebar.slider("Decision threshold", 0.0, 1.0, 0.5)
+# Candidate columns suggested by user
+preferred_text_cols = ["col_1", "col_0", "text_clean", "text_lower", "text_contracts_masked", "text_number", "text_stripped", "text_whitespace", "text_stopwords_removed"]
+preferred_label_cols = ["col_1", "col_0", "label"]
 
-# Layout: main content (left) and controls (right)
-main_col, control_col = st.columns([3, 1])
-
-with control_col:
-    st.header("Controls")
-    csv_path = st.text_input("Dataset CSV", value=st.session_state.get('csv_path', DEFAULT_CSV))
-    models_dir = st.text_input("Models dir", value=st.session_state.get('models_dir', DEFAULT_MODELS))
-    text_size = st.number_input("Max text length (chars)", value=st.session_state.get('text_size', 1000))
-    seed = st.number_input("Seed", value=st.session_state.get('seed', 42))
-    threshold = st.slider("Decision threshold", 0.0, 1.0, float(st.session_state.get('threshold', 0.5)))
-    st.markdown("---")
-    # persistent storage
-    st.session_state['csv_path'] = csv_path
-    st.session_state['models_dir'] = models_dir
-    st.session_state['text_size'] = text_size
-    st.session_state['seed'] = seed
-    st.session_state['threshold'] = threshold
-
-    # Reload / refresh buttons
-    if st.button('Reload dataset'):
-        try:
-            st.cache_data.clear()
-        except Exception:
-            pass
-        st.experimental_rerun()
-    if st.button('Reload model'):
-        try:
-            st.cache_data.clear()
-        except Exception:
-            pass
-        st.experimental_rerun()
-
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Column selectors")
 
 @st.cache_data
 def load_data(path):
@@ -67,28 +44,51 @@ def load_model(path):
         return None
 
 
-# load dataset and model after reading controls
 df = load_data(csv_path)
+
+def sidebar_column_selector(df, key_prefix=""):
+    # create choices from dataframe columns plus preferred lists
+    if df is not None:
+        cols = list(dict.fromkeys(list(df.columns) + preferred_text_cols + preferred_label_cols))
+    else:
+        cols = preferred_text_cols + preferred_label_cols
+    label_choice = st.sidebar.selectbox("Label column", cols, index=cols.index('label') if 'label' in cols else 0, key=key_prefix+"_label")
+    text_choice = st.sidebar.selectbox("Text column", cols, index=cols.index('text_clean') if 'text_clean' in cols else (cols.index('text') if 'text' in cols else 1), key=key_prefix+"_text")
+    if st.sidebar.button('Reload dataset'):
+        try:
+            st.cache_data.clear()
+        except Exception:
+            pass
+        st.experimental_rerun()
+    return label_choice, text_choice
+
+label_col, text_col = sidebar_column_selector(df, key_prefix="main")
+
+st.title("HW3 — Spam classifier demo")
+st.markdown(f"**Using label column:** `{label_col}`  —  **text column:** `{text_col}`")
+if df is None:
+    st.info('Dataset not loaded. Enter a valid Dataset CSV path in the sidebar and press Reload dataset.')
+
 model_path = os.path.join(models_dir, "logreg_pipeline.joblib")
 model = load_model(model_path)
 
-with main_col:
-    st.title("HW3 — Spam classifier demo")
-    st.markdown("### Column selectors (visible)")
-    if df is not None:
-        cols = df.columns.tolist()
-        label_col = st.selectbox("Label column", cols, index=cols.index('label') if 'label' in cols else 0)
-        text_col = st.selectbox("Text column", cols, index=cols.index('text') if 'text' in cols else min(1, len(cols)-1))
-    else:
-        st.info('Dataset not loaded. Enter a valid Dataset CSV path at the right and press Reload dataset.')
-        label_col = st.text_input("Label column", value='label')
-        text_col = st.text_input("Text column", value='text')
+col1, col2 = st.columns([1, 2])
 
-    col_preview, col_empty = st.columns([2, 1])
-    with col_preview:
-        st.header("Data preview")
-        if df is not None:
-            st.dataframe(df.head())
+with col1:
+    st.header("Controls & Status")
+    if df is None:
+        st.error("Could not load dataset. Check the Dataset CSV path in the sidebar.")
+    else:
+        st.write(f"Loaded {len(df)} rows from `{csv_path}`")
+    if model is None:
+        st.warning(f"Model not found at `{model_path}`. Train and save a model first.")
+    else:
+        st.success(f"Loaded model from `{model_path}`")
+
+with col2:
+    st.header("Data preview")
+    if df is not None:
+        st.dataframe(df.head())
 
 st.markdown("---")
 
@@ -102,15 +102,36 @@ def top_tokens(series, n=30):
 if df is not None:
     st.header("Data overview")
     # class distribution
-    vc = df[label_col].astype(str).value_counts()
+    if label_col not in df.columns:
+        st.warning(f"Selected label column `{label_col}` not found in dataset. Showing first column instead.")
+        label_to_use = df.columns[0]
+    else:
+        label_to_use = label_col
+    vc = df[label_to_use].astype(str).value_counts()
     st.subheader("Class distribution")
     st.bar_chart(vc)
 
     st.subheader("Token replacement approximate counts (top 20)")
     # approximate token counts
-    top_all = top_tokens(df[text_col], n=20)
+    if text_col not in df.columns:
+        st.warning(f"Selected text column `{text_col}` not found in dataset. Showing first text-like column instead.")
+        # try to guess a text column
+        candidates = [c for c in df.columns if df[c].dtype == object]
+        text_to_use = candidates[0] if candidates else df.columns[0]
+    else:
+        text_to_use = text_col
+    top_all = top_tokens(df[text_to_use], n=20)
     ta = pd.DataFrame(top_all, columns=['token', 'count'])
     st.table(ta)
+
+    # Token replacement counts (common masks)
+    st.subheader('Token replacement counts (approx)')
+    masks = ['URL', 'EMAIL', 'NUM']
+    mask_counts = {m: 0 for m in masks}
+    for tok, cnt in top_all:
+        if tok in mask_counts:
+            mask_counts[tok] = cnt
+    st.table(pd.DataFrame(list(mask_counts.items()), columns=['token','count']))
 
     st.subheader("Top tokens by class (approx)")
     spam_texts = df[df[label_col].astype(str).str.lower().str.contains('spam')][text_col]
