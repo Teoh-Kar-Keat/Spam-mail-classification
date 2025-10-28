@@ -39,30 +39,6 @@
 - 限制與未來改進方向
 - 附錄（指令、範例輸出、測試範例、檔案清單）
 
-# HW3 — SMS Spam Classifier (Logistic Regression)
-
-This repository contains a complete homework project that implements a mobile/SMS spam classifier using a TF-IDF + Logistic Regression pipeline, with supporting preprocessing, training, prediction, and a Streamlit-based demo app for deployment and inspection.
-
-This README contains an extended technical report (training, testing, and deployment) intended to be comprehensive and reproducible. It documents data handling, preprocessing choices, model experiments, evaluation, deployment, CI, and reproducibility steps. The content that follows is written to be self-contained: you should be able to reproduce the model and the demo using the supplied scripts and the commands listed in the appendices.
-
-Table of contents
-- Executive summary
-- Dataset and exploratory analysis
-- Detailed preprocessing pipeline and code notes
-- Feature engineering and vectorization
-- Model selection, training, and hyperparameter tuning
-- Cross-validation, stability checks, and ensembling experiments
-- Test evaluation, metrics, and thresholding
-- Error analysis and mitigation strategies
-- Model export, artifact layout and versioning
-- Deployment: Streamlit app, Docker, and production considerations
-- CI/CD and OpenSpec-driven validation
-- Reproducibility and environment specification
-- Monitoring, logging, and maintenance
-- Ethical considerations and data privacy
-- Limitations and future improvements
-- Appendices (commands, sample outputs, test examples, file manifest)
-
 執行摘要
 -----------------
 本專案建立一個穩健的基線（baseline）簡訊垃圾郵件分類器，採用經典的 NLP 管線：文字正規化（normalization）、TF-IDF 特徵抽取與 L2 正則化的 Logistic Regression。主要目標：
