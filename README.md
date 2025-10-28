@@ -19,7 +19,7 @@ Phases:
 
 Run locally (example):
 ```powershell
-python preprocessing.py --input D:\\test\\HW3\\sms_spam_no_header.csv --output D:\\test\\HW3\\sms_spam_clean.csv
-python train.py --input D:\\test\\HW3\\sms_spam_clean.csv --model-dir models
+python preprocessing.py --input sms_spam_no_header.csv --output sms_spam_clean.csv
+python train.py --input sms_spam_clean.csv --model-dir models
 streamlit run app.py
 ```
