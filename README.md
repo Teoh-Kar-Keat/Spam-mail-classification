@@ -39,6 +39,30 @@
 - 限制與未來改進方向
 - 附錄（指令、範例輸出、測試範例、檔案清單）
 
+# HW3 — SMS Spam Classifier (Logistic Regression)
+
+This repository contains a complete homework project that implements a mobile/SMS spam classifier using a TF-IDF + Logistic Regression pipeline, with supporting preprocessing, training, prediction, and a Streamlit-based demo app for deployment and inspection.
+
+This README contains an extended technical report (training, testing, and deployment) intended to be comprehensive and reproducible. It documents data handling, preprocessing choices, model experiments, evaluation, deployment, CI, and reproducibility steps. The content that follows is written to be self-contained: you should be able to reproduce the model and the demo using the supplied scripts and the commands listed in the appendices.
+
+Table of contents
+- Executive summary
+- Dataset and exploratory analysis
+- Detailed preprocessing pipeline and code notes
+- Feature engineering and vectorization
+- Model selection, training, and hyperparameter tuning
+- Cross-validation, stability checks, and ensembling experiments
+- Test evaluation, metrics, and thresholding
+- Error analysis and mitigation strategies
+- Model export, artifact layout and versioning
+- Deployment: Streamlit app, Docker, and production considerations
+- CI/CD and OpenSpec-driven validation
+- Reproducibility and environment specification
+- Monitoring, logging, and maintenance
+- Ethical considerations and data privacy
+- Limitations and future improvements
+- Appendices (commands, sample outputs, test examples, file manifest)
+
 執行摘要
 -----------------
 本專案建立一個穩健的基線（baseline）簡訊垃圾郵件分類器，採用經典的 NLP 管線：文字正規化（normalization）、TF-IDF 特徵抽取與 L2 正則化的 Logistic Regression。主要目標：
@@ -337,6 +361,117 @@ jobs:
 			- run: pytest -q
 			- run: python -c "import joblib; joblib.load('models/logreg_pipeline.joblib')" || echo 'model missing'
 ```
+
+使用 OpenSpec 管理本作業
+---------------------------------
+
+本專案以 OpenSpec 作為規格與變更流程控制工具。以下為建議的實作與協作流程，能讓作業變更、CI 驗證、與審查更具可追溯性與一致性。
+
+核心原則
+
+- 所有影響專案行為或介面的變更（包括前處理規則、模型工件格式、API/介面變更、或 CI 設定），應以 OpenSpec 變更提案（change proposal）描述、提交與審查。
+- 變更提案與規格存放於 `openspec/` 標準目錄：`openspec/project.md`、`openspec/specs/`、以及 `openspec/changes/`。
+
+快速上手（本地開發）
+
+1. 撰寫變更提案目錄：
+
+	 - 建立目錄 `openspec/changes/<YYYY-MM-DD>-short-name/`。
+	 - 在該目錄新增 `proposal.md`（摘要、目的、影響範圍、關聯檔案）與 `tasks.md`（要做的步驟）。
+
+	 範例資料夾結構：
+
+	 ```text
+	 openspec/
+		 changes/
+			 2025-10-28-add-openspec-ci/
+				 proposal.md
+				 tasks.md
+		 specs/
+			 ci/spec.md
+		 project.md
+	 ```
+
+2. proposal.md 範本（建議欄位）
+
+	 - 標題（title）：一句話說明變更。
+	 - 摘要（summary）：簡短描述變更內容與原因。
+	 - 影響（impact）：列出會被修改或影響的檔案與模組（e.g., `app.py`, `train.py`, `models/manifest.json`）。
+	 - 測試策略（tests）：說明如何在本地或 CI 驗證變更（例如 `pytest`、`openspec validate`、載入模型 smoke test）。
+	 - 風險與回滾（risk/rollback）：若變更失敗，如何回滾或關閉功能。
+
+	 小範例（proposal.md）：
+
+	 ```md
+	 # 標題
+	 新增 CI 階段以執行 `openspec validate --strict`
+
+	 ## 摘要
+	 在 CI 中加入 OpenSpec 驗證步驟，確保每次 PR 提交都會通過規格校驗。
+
+	 ## 影響
+	 - 修改: .github/workflows/ci.yml
+	 - 新增: openspec/specs/ci/spec.md
+
+	 ## 測試
+	 - 本地執行 `openspec validate --strict` 應回傳成功 (exit code 0)。
+
+	 ## 回滾
+	 - 若驗證造成阻擋，可先在 CI 暫時註解該步驟並通知 maintainers。
+	 ```
+
+3. 在本地驗證 OpenSpec 提案
+
+	 - 安裝或使用專案環境中可用的 `openspec` CLI（若尚未安裝，請參閱團隊或 OpenSpec 文件）。
+	 - 執行：
+
+	 ```powershell
+	 openspec validate --strict
+	 ```
+
+	 - 若發現錯誤，根據 CLI 回饋修改 `openspec/changes/...` 或 `openspec/specs/...`，直到通過驗證。
+
+CI 與合併流程建議
+
+- 在 GitHub Actions（或其他 CI）中加入 `openspec validate --strict` 作為必要檢查。若規格驗證失敗，阻擋 PR 合併，並回報錯誤訊息以利修正。
+- PR 標題與描述應包含變更 ID（例如 `openspec change: 2025-10-28-add-openspec-ci`），並在 PR template 中要求連結到 `openspec/changes/<id>/proposal.md`。
+- 指派至少一名規格審查者（spec reviewer）來檢視 proposal.md 與 tasks.md。規格審查可與程式碼審查協同進行。
+
+如何在 README 中記錄規格關聯
+
+- 若變更牽涉模型工件格式或 API，請在 README 的 "模型匯出、工件佈局與版本管理" 區段加入 spec 連結或 manifest 範例，讓使用者與 CI 可追蹤版本。
+- 範例：在 `models/manifest.json` 中加入 `spec_change_id` 欄位，指向採用之 OpenSpec 變更，例如：
+
+```json
+{
+	"model_version": "v0.1.0",
+	"spec_change_id": "2025-10-28-add-openspec-ci"
+}
+```
+
+推薦 reviewer 與合併檢查清單
+
+1. 變更提案語意是否清楚（summary、impact、tests）？
+2. 是否已在本地執行 `openspec validate` 並通過？
+3. 有沒有對 README、specs、或模型 manifest 做同步更新？
+4. CI workflow 是否已包含 `openspec validate`，且對失敗有明確回饋？
+
+範例 CI 片段（將 `openspec validate` 設為必要步驟）
+
+```yaml
+- name: OpenSpec validate
+	run: openspec validate --strict
+```
+
+進階建議
+
+- 將 `openspec/changes/` 的變更 ID 與 Git 分支或 PR 進行一對一綁定（例如使用分支命名規則 `change/<id>-short`），以便快速追溯。
+- 在 PR merge 時，將已批准的 change id 加入 `models/CHANGELOG.md` 與 `models/manifest.json`，確保模型與規格是同步的。
+- 若希望強化可追溯性，可把 `openspec validate` 的輸出（或狀態）貼至 PR 的 comment（或 CI artifact），以利審查者確認。
+
+結語
+
+使用 OpenSpec 能把規格變更流程化、機械化（CI 驗證）與可追溯化（changes 與 manifest）。我已在本 README 加入範例模板與 CI 片段；若要我直接替某個待辦項（例如新增 CI workflow 或建立 change proposal 範例檔）建立 PR，我可以立即協助實作並在 CI 上驗證通過。
 
 可重現性與環境說明
 --------------------------------------------
