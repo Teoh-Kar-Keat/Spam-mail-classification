@@ -1,275 +1,278 @@
-"""Streamlit demo app for the spam classifier.
-Run: streamlit run app.py
-"""
-import streamlit as st
-import pandas as pd
-import joblib
 import os
-import numpy as np
+import json
+import time
 from collections import Counter
+from typing import List, Tuple
+
+import joblib
+import numpy as np
+import pandas as pd
+import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import (confusion_matrix, classification_report, roc_curve, auc, precision_recall_curve, average_precision_score, precision_score, recall_score, f1_score)
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    confusion_matrix,
+    roc_curve,
+    auc,
+    precision_recall_curve,
+    PrecisionRecallDisplay,
+)
 
 
-sns.set(style="whitegrid")
-st.set_page_config(layout="wide")
-
-st.sidebar.title("HW3 Spam Classifier Demo")
-csv_path = st.sidebar.text_input("Dataset CSV", value="sms_spam_clean.csv")
-models_dir = st.sidebar.text_input("Models dir", value="models")
-text_size = st.sidebar.number_input("Max text length (chars)", value=1000)
-seed = st.sidebar.number_input("Seed", value=42)
-threshold = st.sidebar.slider("Decision threshold", 0.0, 1.0, 0.5)
-# Candidate columns suggested by user
-preferred_text_cols = ["col_1", "col_0", "text_clean", "text_lower", "text_contracts_masked", "text_number", "text_stripped", "text_whitespace", "text_stopwords_removed"]
-preferred_label_cols = ["col_1", "col_0", "label"]
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### Column selectors")
-
-@st.cache_data
-def load_data(path):
-    try:
-        return pd.read_csv(path)
-    except Exception:
-        return None
+st.set_page_config(page_title="Spam Classifier — Visualizations", layout="wide")
 
 
-@st.cache_data
-def load_model(path):
-    try:
-        return joblib.load(path)
-    except Exception:
-        return None
+def ts() -> str:
+    return time.strftime("%Y%m%d-%H%M%S")
 
 
-df = load_data(csv_path)
+@st.cache_data(show_spinner=False)
+def load_csv(path: str) -> pd.DataFrame:
+    return pd.read_csv(path)
 
-def sidebar_column_selector(df, key_prefix=""):
-    # create choices from dataframe columns plus preferred lists
-    if df is not None:
-        cols = list(dict.fromkeys(list(df.columns) + preferred_text_cols + preferred_label_cols))
-    else:
-        cols = preferred_text_cols + preferred_label_cols
-    label_choice = st.sidebar.selectbox("Label column", cols, index=cols.index('label') if 'label' in cols else 0, key=key_prefix+"_label")
-    text_choice = st.sidebar.selectbox("Text column", cols, index=cols.index('text_clean') if 'text_clean' in cols else (cols.index('text') if 'text' in cols else 1), key=key_prefix+"_text")
-    # Do not call experimental_rerun directly inside helper — set a session flag instead
-    if st.sidebar.button('Reload dataset'):
-        st.session_state['reload_requested'] = True
-    return label_choice, text_choice
 
-label_col, text_col = sidebar_column_selector(df, key_prefix="main")
+@st.cache_data(show_spinner=False)
+def list_datasets() -> List[str]:
+    paths: List[str] = []
+    for root in ("datasets", os.path.join("datasets", "processed")):
+        if os.path.isdir(root):
+            for name in os.listdir(root):
+                p = os.path.join(root, name)
+                if name.lower().endswith(".csv") and os.path.isfile(p):
+                    paths.append(p)
+    # also include root-level cleaned file if present
+    if os.path.exists("sms_spam_clean.csv"):
+        paths.append("sms_spam_clean.csv")
+    return sorted(paths)
 
-# If reload was requested, clear caches and rerun from main flow
-if st.session_state.get('reload_requested'):
-    try:
-        st.cache_data.clear()
-    except Exception:
-        pass
-    # reset flag then rerun
-    st.session_state.pop('reload_requested', None)
-    # reload dataset into df without calling experimental_rerun (safer for hosted runtimes)
-    df = load_data(csv_path)
 
-st.title("HW3 — Spam classifier demo")
-st.markdown(f"**Using label column:** `{label_col}`  —  **text column:** `{text_col}`")
-if df is None:
-    st.info('Dataset not loaded. Enter a valid Dataset CSV path in the sidebar and press Reload dataset.')
+def infer_cols(df: pd.DataFrame) -> Tuple[str, str]:
+    # Try to infer label/text columns
+    cols = list(df.columns)
+    label_candidates = [c for c in cols if c.lower() in ("label", "target", "col_0")]
+    text_candidates = [c for c in cols if c.lower() in ("text", "message", "text_clean", "col_1")]
+    label = label_candidates[0] if label_candidates else cols[0]
+    text = text_candidates[0] if text_candidates else cols[-1]
+    return label, text
 
-model_path = os.path.join(models_dir, "logreg_pipeline.joblib")
-model = load_model(model_path)
 
-col1, col2 = st.columns([1, 2])
+def token_topn(series: pd.Series, topn: int) -> List[Tuple[str, int]]:
+    counter: Counter = Counter()
+    for s in series.astype(str):
+        counter.update(s.split())
+    return counter.most_common(topn)
 
-with col1:
-    st.header("Controls & Status")
-    if df is None:
-        st.error("Could not load dataset. Check the Dataset CSV path in the sidebar.")
-    else:
-        st.write(f"Loaded {len(df)} rows from `{csv_path}`")
-    if model is None:
-        st.warning(f"Model not found at `{model_path}`. Train and save a model first.")
-    else:
-        st.success(f"Loaded model from `{model_path}`")
 
-with col2:
-    st.header("Data preview")
-    if df is not None:
-        st.dataframe(df.head())
+@st.cache_resource(show_spinner=False)
+def load_artifacts(models_dir: str):
+    # Support both named artifacts and the existing pipeline file
+    vec_path = os.path.join(models_dir, "spam_tfidf_vectorizer.joblib")
+    clf_path = os.path.join(models_dir, "spam_logreg_model.joblib")
+    pipeline_path = os.path.join(models_dir, "logreg_pipeline.joblib")
 
-st.markdown("---")
-
-def top_tokens(series, n=30):
-    c = Counter()
-    for t in series.fillna('').astype(str):
-        for w in t.split():
-            c[w] += 1
-    return c.most_common(n)
-
-if df is not None:
-    st.header("Data overview")
-    # class distribution
-    if label_col not in df.columns:
-        st.warning(f"Selected label column `{label_col}` not found in dataset. Showing first column instead.")
-        label_to_use = df.columns[0]
-    else:
-        label_to_use = label_col
-    vc = df[label_to_use].astype(str).value_counts()
-    st.subheader("Class distribution")
-    st.bar_chart(vc)
-
-    st.subheader("Token replacement approximate counts (top 20)")
-    # approximate token counts
-    if text_col not in df.columns:
-        st.warning(f"Selected text column `{text_col}` not found in dataset. Showing first text-like column instead.")
-        # try to guess a text column
-        candidates = [c for c in df.columns if df[c].dtype == object]
-        text_to_use = candidates[0] if candidates else df.columns[0]
-    else:
-        text_to_use = text_col
-    top_all = top_tokens(df[text_to_use], n=20)
-    ta = pd.DataFrame(top_all, columns=['token', 'count'])
-    st.table(ta)
-
-    # Token replacement counts (common masks)
-    st.subheader('Token replacement counts (approx)')
-    masks = ['URL', 'EMAIL', 'NUM']
-    mask_counts = {m: 0 for m in masks}
-    for tok, cnt in top_all:
-        if tok in mask_counts:
-            mask_counts[tok] = cnt
-    st.table(pd.DataFrame(list(mask_counts.items()), columns=['token','count']))
-
-    st.subheader("Top tokens by class (approx)")
-    # use validated column names
-    spam_texts = df[df[label_to_use].astype(str).str.lower().str.contains('spam')][text_to_use]
-    ham_texts = df[~df[label_to_use].astype(str).str.lower().str.contains('spam')][text_to_use]
-    top_spam = dict(top_tokens(spam_texts, n=30))
-    top_ham = dict(top_tokens(ham_texts, n=30))
-    tokens = list(set(list(top_spam.keys()) + list(top_ham.keys())))
-    data = []
-    for t in tokens:
-        data.append({'token': t, 'spam': top_spam.get(t, 0), 'ham': top_ham.get(t, 0)})
-    tf = pd.DataFrame(data).sort_values('spam', ascending=False).head(30)
-    fig, ax = plt.subplots()
-    tf.set_index('token')[['spam', 'ham']].plot(kind='bar', ax=ax)
-    ax.set_title('Top tokens by class (approx)')
-    st.pyplot(fig)
-
-    st.markdown('---')
-
-    if model is not None:
-        st.header('Model performance on a held-out subset')
-        # create a quick train/test split to evaluate using validated columns
-        X = df[text_to_use].astype(str)
-        y = df[label_to_use].astype(str)
+    vec = None
+    clf = None
+    if os.path.exists(pipeline_path):
         try:
-            from sklearn.model_selection import train_test_split
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=seed, stratify=y)
+            pipe = joblib.load(pipeline_path)
+            # try to extract vectorizer and classifier
+            if hasattr(pipe, 'named_steps') and 'tfidf' in pipe.named_steps and 'clf' in pipe.named_steps:
+                vec = pipe.named_steps['tfidf']
+                clf = pipe.named_steps['clf']
         except Exception:
-            X_train, X_test, y_train, y_test = X, X, y, y
+            pass
+    # fallback to separate artifacts
+    if vec is None and os.path.exists(vec_path):
+        vec = joblib.load(vec_path)
+    if clf is None and os.path.exists(clf_path):
+        clf = joblib.load(clf_path)
 
-        preds = model.predict(X_test)
-        if hasattr(model, 'predict_proba'):
-            if 'spam' in model.classes_:
-                prob_spam = model.predict_proba(X_test)[:, list(model.classes_).index('spam')]
+    pos, neg = "spam", "ham"
+    meta_p = os.path.join(models_dir, "spam_label_mapping.json")
+    if os.path.exists(meta_p):
+        try:
+            with open(meta_p, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+                pos = meta.get("positive", pos)
+                neg = meta.get("negative", neg)
+        except Exception:
+            pass
+    return vec, clf, pos, neg
+
+
+def label_to_int(series: pd.Series, pos_label: str = "spam") -> np.ndarray:
+    s = series.astype(str).str.lower()
+    return (s == pos_label.lower()).astype(int).values
+
+
+# Lightweight normalization to match training text_clean behavior for live inference
+import re
+URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+EMAIL_RE = re.compile(r"\b[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,}\b")
+PHONE_RE = re.compile(r"\b(?:\+?\d[\d\-\s]{7,}\d)\b")
+
+
+def normalize_text(text: str, keep_numbers: bool = False) -> str:
+    if not isinstance(text, str):
+        text = "" if text is None else str(text)
+    t = text.lower()
+    t = URL_RE.sub("<URL>", t)
+    t = EMAIL_RE.sub("<EMAIL>", t)
+    t = PHONE_RE.sub("<PHONE>", t)
+    if not keep_numbers:
+        t = re.sub(r"\d+", "<NUM>", t)
+    t = re.sub(r"[^\w\s<>]", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def main():
+    st.title("Spam/Ham Classifier — Phase 4 Visualizations")
+    st.caption("Interactive dashboard for data distribution, token patterns, and model performance")
+
+    # Sidebar: data and artifacts
+    with st.sidebar:
+        st.header("Inputs")
+        datasets = list_datasets()
+        ds_path = st.selectbox("Dataset CSV", datasets, index=datasets.index("sms_spam_clean.csv") if "sms_spam_clean.csv" in datasets else 0)
+        df = load_csv(ds_path)
+        label_col, text_col = infer_cols(df)
+        label_col = st.selectbox("Label column", options=list(df.columns), index=list(df.columns).index(label_col))
+        text_col = st.selectbox("Text column", options=list(df.columns), index=list(df.columns).index(text_col))
+
+        models_dir = st.text_input("Models dir", value="models")
+        test_size = st.slider("Test size", min_value=0.1, max_value=0.4, value=0.2, step=0.05)
+        seed = st.number_input("Seed", min_value=0, value=42, step=1)
+        threshold = st.slider("Decision threshold", min_value=0.1, max_value=0.9, value=0.5, step=0.01)
+
+    st.subheader("Data Overview")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.write("Class distribution")
+        counts = df[label_col].value_counts().sort_index()
+        st.bar_chart(counts)
+    with c2:
+        st.write("Token replacements in cleaned text (approximate)")
+        sample = df[text_col].astype(str)
+        repl = {
+            "<URL>": sample.str.count(r"<URL>").sum(),
+            "<EMAIL>": sample.str.count(r"<EMAIL>").sum(),
+            "<PHONE>": sample.str.count(r"<PHONE>").sum(),
+            "<NUM>": sample.str.count(r"<NUM>").sum(),
+        }
+        st.table(pd.DataFrame.from_dict(repl, orient="index", columns=["count"]))
+
+    st.subheader("Top Tokens by Class")
+    topn = st.slider("Top-N tokens", min_value=10, max_value=40, value=20, step=5)
+    col_a, col_b = st.columns(2)
+    for label, col in [(counts.index[0], col_a), (counts.index[-1], col_b)]:
+        with col:
+            st.write(f"Class: {label}")
+            top = token_topn(df.loc[df[label_col] == label, text_col], topn)
+            if top:
+                toks, freqs = zip(*top)
+                fig, ax = plt.subplots(figsize=(6, 4))
+                sns.barplot(x=list(freqs), y=list(toks), ax=ax, palette="viridis")
+                ax.set_xlabel("frequency"); ax.set_ylabel("token")
+                st.pyplot(fig)
             else:
-                prob_spam = model.predict_proba(X_test)[:, 1]
+                st.info("No tokens found.")
+
+    # Model-based visuals
+    st.subheader("Model Performance (Test)")
+    if os.path.exists(os.path.join(models_dir, "spam_tfidf_vectorizer.joblib")) or os.path.exists(os.path.join(models_dir, "logreg_pipeline.joblib")) or os.path.exists(os.path.join(models_dir, "spam_logreg_model.joblib")):
+        vec, clf, pos_label, neg_label = load_artifacts(models_dir)
+        if vec is None or clf is None:
+            st.info("Model artifacts found but could not be loaded. Check model files.")
         else:
-            prob_spam = np.zeros(len(preds))
+            X = df[text_col].astype(str).fillna("")
+            y = label_to_int(df[label_col], pos_label=pos_label)
+            Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=test_size, random_state=seed, stratify=y)
+            Xte_vec = vec.transform(Xte)
+            proba = clf.predict_proba(Xte_vec)[:, 1]
+            pred = (proba >= threshold).astype(int)
 
-        st.subheader('Classification report')
-        st.text(classification_report(y_test, preds))
+            # Confusion matrix
+            cm = confusion_matrix(yte, pred)
+            cm_df = pd.DataFrame(cm, index=[f"true_{neg_label}", f"true_{pos_label}"], columns=[f"pred_{neg_label}", f"pred_{pos_label}"])
+            st.write("Confusion matrix")
+            st.dataframe(cm_df)
 
-        st.subheader('Confusion matrix')
-        labels = list(model.classes_)
-        cm = confusion_matrix(y_test, preds, labels=labels)
-        fig, ax = plt.subplots()
-        sns.heatmap(cm, annot=True, fmt='d', xticklabels=labels, yticklabels=labels, ax=ax)
-        ax.set_xlabel('Predicted')
-        ax.set_ylabel('True')
-        st.pyplot(fig)
+            # ROC/PR curves
+            fpr, tpr, _ = roc_curve(yte, proba)
+            roc_auc = auc(fpr, tpr)
+            prec, rec, _ = precision_recall_curve(yte, proba)
+            pr_fig, pr_ax = plt.subplots(1, 2, figsize=(10, 4))
+            pr_ax[0].plot(fpr, tpr, label=f"AUC={roc_auc:.3f}")
+            pr_ax[0].plot([0,1],[0,1], linestyle="--", color="gray")
+            pr_ax[0].set_title("ROC")
+            pr_ax[0].set_xlabel("FPR"); pr_ax[0].set_ylabel("TPR")
+            PrecisionRecallDisplay(precision=prec, recall=rec).plot(ax=pr_ax[1])
+            pr_ax[1].set_title("Precision-Recall")
+            st.pyplot(pr_fig)
 
-        st.subheader('ROC and Precision-Recall')
-        fpr, tpr, _ = roc_curve((y_test == 'spam').astype(int), prob_spam)
-        roc_auc = auc(fpr, tpr)
-        precision, recall, _ = precision_recall_curve((y_test == 'spam').astype(int), prob_spam)
-        ap = average_precision_score((y_test == 'spam').astype(int), prob_spam)
-        fig, ax = plt.subplots()
-        ax.plot(fpr, tpr, label=f'ROC AUC = {roc_auc:.3f}')
-        ax.plot([0, 1], [0, 1], '--', color='gray')
-        ax.set_xlabel('FPR')
-        ax.set_ylabel('TPR')
-        ax.legend()
-        st.pyplot(fig)
+            # Threshold sweep small table
+            st.write("Threshold sweep (precision/recall/f1)")
+            ths = np.round(np.linspace(0.3, 0.8, 11), 3)
+            rows = []
+            for t in ths:
+                p = (proba >= t).astype(int)
+                from sklearn.metrics import precision_score, recall_score, f1_score
 
-        fig, ax = plt.subplots()
-        ax.plot(recall, precision, label=f'AP = {ap:.3f}')
-        ax.set_xlabel('Recall')
-        ax.set_ylabel('Precision')
-        ax.legend()
-        st.pyplot(fig)
+                rows.append({
+                    "threshold": t,
+                    "precision": float(precision_score(yte, p, zero_division=0)),
+                    "recall": float(recall_score(yte, p, zero_division=0)),
+                    "f1": float(f1_score(yte, p, zero_division=0)),
+                })
+            st.dataframe(pd.DataFrame(rows))
 
-        st.subheader('Threshold sweep (precision/recall/f1)')
-        thresholds = np.linspace(0, 1, 101)
-        rows = []
-        for t in thresholds:
-            preds_t = (prob_spam >= t).astype(int)
-            precision_v = precision_score((y_test == 'spam').astype(int), preds_t, zero_division=0)
-            recall_v = recall_score((y_test == 'spam').astype(int), preds_t, zero_division=0)
-            f1_v = f1_score((y_test == 'spam').astype(int), preds_t, zero_division=0)
-            rows.append({'threshold': t, 'precision': precision_v, 'recall': recall_v, 'f1': f1_v})
-        ts = pd.DataFrame(rows)
-        fig, ax = plt.subplots()
-        ax.plot(ts['threshold'], ts['precision'], label='precision')
-        ax.plot(ts['threshold'], ts['recall'], label='recall')
-        ax.plot(ts['threshold'], ts['f1'], label='f1')
-        ax.set_xlabel('threshold')
-        ax.set_ylabel('score')
-        ax.legend()
-        st.pyplot(fig)
+            # Live Inference
+            st.subheader("Live Inference")
+            # Provide two quick examples to try
+            ex_spam = "Free entry in 2 a wkly comp to win cash now! Call +44 906-170-1461 to claim prize"
+            ex_ham = "Ok, I'll see you at 7 pm for dinner. Thanks!"
+            c_ex1, c_ex2 = st.columns(2)
+            with c_ex1:
+                if st.button("Use spam example"):
+                    st.session_state["input_text"] = ex_spam
+            with c_ex2:
+                if st.button("Use ham example"):
+                    st.session_state["input_text"] = ex_ham
 
-st.markdown('---')
+            # Text area bound to session_state so examples populate it
+            if "input_text" not in st.session_state:
+                st.session_state["input_text"] = ""
+            user_text = st.text_area("Enter a message to classify", key="input_text")
 
-st.header('Live inference')
-example_spam, example_ham = st.columns(2)
-with example_spam:
-    if st.button('Use spam example'):
-        if df is not None:
-            sp = df[df[label_col].astype(str).str.lower().str.contains('spam')]
-            if not sp.empty:
-                sample_text = sp.sample(1, random_state=seed).iloc[0][text_col]
-                st.session_state['input_text'] = sample_text
-with example_ham:
-    if st.button('Use ham example'):
-        if df is not None:
-            ha = df[~df[label_col].astype(str).str.lower().str.contains('spam')]
-            if not ha.empty:
-                sample_text = ha.sample(1, random_state=seed).iloc[0][text_col]
-                st.session_state['input_text'] = sample_text
+            if st.button("Predict"):
+                if user_text.strip():
+                    cleaned = normalize_text(user_text)
+                    with st.expander("Show normalized text", expanded=False):
+                        st.code(cleaned)
+                    X_single = vec.transform([cleaned])
+                    prob = float(clf.predict_proba(X_single)[:, 1][0])
+                    pred_label = pos_label if prob >= threshold else neg_label
+                    st.success(f"Prediction: {pred_label}  |  spam-prob = {prob:.4f}  (threshold = {threshold:.2f})")
 
-text_input = st.text_area('Message to classify', value=st.session_state.get('input_text', ''), height=150)
+                    # Probability bar (0..1) with threshold marker
+                    fig_g, ax_g = plt.subplots(figsize=(6, 0.6))
+                    ax_g.barh([0], [prob], color="#d62728" if pred_label == pos_label else "#1f77b4")
+                    ax_g.axvline(threshold, color="black", linestyle="--", linewidth=1)
+                    ax_g.set_xlim(0, 1)
+                    ax_g.set_yticks([])
+                    ax_g.set_xlabel("spam probability")
+                    ax_g.text(min(prob + 0.02, 0.98), 0, f"{prob:.2f}", va="center")
+                    st.pyplot(fig_g)
+                else:
+                    st.info("Please enter a non-empty message.")
 
-if st.button('Predict'):
-    if model is None:
-        st.error('Model not found. Train and save a model to the models dir first.')
+        
     else:
-        proba = model.predict_proba([text_input])[0]
-        labels = list(model.classes_)
-        prob_spam_val = proba[labels.index('spam')] if 'spam' in labels else proba[1]
-        st.write({labels[i]: float(proba[i]) for i in range(len(labels))})
-        # show probability bar
-        fig, ax = plt.subplots()
-        ax.bar(labels, proba)
-        ax.set_ylabel('Probability')
-        st.pyplot(fig)
+        st.info("Model artifacts not found in 'models/'. Train the model first to enable performance plots.")
 
-        # show spam probability over thresholds (mini chart)
-        fig, ax = plt.subplots()
-        ax.plot([0, threshold, 1], [0, prob_spam_val, 1], marker='o')
-        ax.set_xlabel('Decision space (example)')
-        ax.set_ylabel('Spam probability')
-        ax.set_title(f'Spam probability = {prob_spam_val:.3f} (threshold {threshold:.2f})')
-        st.pyplot(fig)
+
+if __name__ == "__main__":
+    main()
 
