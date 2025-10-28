@@ -38,31 +38,52 @@
 - 倫理與資料隱私
 - 限制與未來改進方向
 - 附錄（指令、範例輸出、測試範例、檔案清單）
+  
+使用 OpenSpec 管理本作業
+---------------------------------
 
-# HW3 — SMS Spam Classifier (Logistic Regression)
+本專案以 OpenSpec 作為規格與變更流程控制工具。以下為建議的實作與協作流程，能讓作業變更、CI 驗證、與審查更具可追溯性與一致性。
 
-This repository contains a complete homework project that implements a mobile/SMS spam classifier using a TF-IDF + Logistic Regression pipeline, with supporting preprocessing, training, prediction, and a Streamlit-based demo app for deployment and inspection.
+核心原則
 
-This README contains an extended technical report (training, testing, and deployment) intended to be comprehensive and reproducible. It documents data handling, preprocessing choices, model experiments, evaluation, deployment, CI, and reproducibility steps. The content that follows is written to be self-contained: you should be able to reproduce the model and the demo using the supplied scripts and the commands listed in the appendices.
+- 所有影響專案行為或介面的變更（包括前處理規則、模型工件格式、API/介面變更、或 CI 設定），應以 OpenSpec 變更提案（change proposal）描述、提交與審查。
+- 變更提案與規格存放於 `openspec/` 標準目錄：`openspec/project.md`、`openspec/specs/`、以及 `openspec/changes/`。
 
-Table of contents
-- Executive summary
-- Dataset and exploratory analysis
-- Detailed preprocessing pipeline and code notes
-- Feature engineering and vectorization
-- Model selection, training, and hyperparameter tuning
-- Cross-validation, stability checks, and ensembling experiments
-- Test evaluation, metrics, and thresholding
-- Error analysis and mitigation strategies
-- Model export, artifact layout and versioning
-- Deployment: Streamlit app, Docker, and production considerations
-- CI/CD and OpenSpec-driven validation
-- Reproducibility and environment specification
-- Monitoring, logging, and maintenance
-- Ethical considerations and data privacy
-- Limitations and future improvements
-- Appendices (commands, sample outputs, test examples, file manifest)
+快速上手（本地開發）
 
+1. 撰寫變更提案目錄：
+
+	 - 建立目錄 `openspec/changes/<YYYY-MM-DD>-short-name/`。
+	 - 在該目錄新增 `proposal.md`（摘要、目的、影響範圍、關聯檔案）與 `tasks.md`（要做的步驟）。
+
+	 範例資料夾結構：
+
+	 ```text
+	 openspec/
+		 changes/
+			 2025-10-28-add-openspec-ci/
+				 proposal.md
+				 tasks.md
+		 specs/
+			 ci/spec.md
+		 project.md
+	 ```
+
+2. proposal.md 範本（建議欄位）
+
+   	範例（proposal.md）：
+
+	 ```md
+	Follow instructions in openspec-proposal.prompt.md.
+	im doing HW3 , the aim of this project is to classify spam email and ham email, using logistic regression machine learning method, i seperated in to 5 different phase to done my homework:
+	
+	phase 1 will be the preproceesing process create a preprocessing.py, which try to clean up the data set D:\test\HW3\sms_spam_no_header.csv and save the clean dataset in D:\test\HW3\sms_spam_clean.csv
+	pahse 2 create a train.py and predict.py train and predict the clean data set using logistic regression and save the model.
+	phase 3 according the work before, create a complete ipynb file (from preproccesing to predict), to talk about how to using logistic regression to train a spam email classifiy model using logistic regression. Beside that you also need to visuallise data like data overview(class distribution, token replacements in cleaned text(approximate)),top tokens by class, model performance(text), ROC, Precision-Recall , threshold sweep(precision/recall/f1）, and so on, just wrote anything you think is important)), For, Each code cell, need a markdown cell before it to explain what actually the code cell done, please wrote it in traditional chinese, and executed every cell .
+	phase 4 will be deployment, i will like to create a app.py and push to github, and using streamlit.app to demo, the left side will have some parameter that i can adjust, include (dataset CSV, label colomn, text column, models dir, textsize, seed, decision threshold,)and need display data data overview(class distribution, token replacements in cleaned text(approximate)),top tokens by class +graph , model performance(text)confusion matrix, , ROC, Precision-Recall , threshold sweep(precision/recall/f1, live inference (with 2 button, use spam example, use ham example, a box to fill in message, and a predict button), it will display a spam probalility graph after after predict.
+	phase 5 wrote a complete report with title recoreding how im using openspec to done a spam mail classified streamlit app
+	 ```
+  
 執行摘要
 -----------------
 本專案建立一個穩健的基線（baseline）簡訊垃圾郵件分類器，採用經典的 NLP 管線：文字正規化（normalization）、TF-IDF 特徵抽取與 L2 正則化的 Logistic Regression。主要目標：
@@ -221,7 +242,7 @@ TF-IDF 向量器與係數組成的 joblib 檔案通常為數 MB 等級，詞彙�
 指標說明
 
 我們同時報告針對類別平衡與針對 spam 類別的指標：
-
+- Confusion Matrix (混淆矩陣)
 - Precision（精確率）@閾值：在模型預測為 spam 的樣本中，實際為 spam 的比例。
 - Recall（召回率）@閾值：實際為 spam 的樣本中被正確辨識的比例。
 - F1@閾值。
@@ -243,13 +264,15 @@ TF-IDF 向量器與係數組成的 joblib 檔案通常為數 MB 等級，詞彙�
 
 解讀：提高閾值會提升 precision，但會降低 recall。閾值應根據業務可接受的誤判成本做取捨。
 
+混淆矩陣
+<img width="652" height="473" alt="af50b376-2f3e-47a3-aec9-482f20e34d9a" src="https://github.com/user-attachments/assets/e45139dd-0a4a-44bc-a0a2-2f3cc6c46ab2" />
+
 ROC 與 PR 曲線
+<img width="695" height="473" alt="a4ef9b5f-b34e-4a98-845d-11e66d18c9c9" src="https://github.com/user-attachments/assets/0b501e16-6bee-4ba2-8dba-f624eef2be1e" />
+<img width="695" height="473" alt="629be7f4-a774-4940-a529-a6c0f67898dc" src="https://github.com/user-attachments/assets/cf00d5f4-5983-46cf-bd23-a836eb8f6aa0" />
 
 ROC 曲線可展示模型整體可分離性；PR 曲線在類別不平衡時更具參考價值。我們同時使用 AUC 指標作為補充證據。
 
-校準（Calibration）
-
-會檢視校準圖（reliability plot），若有必要可使用 isotonic regression 或 Platt scaling 進行校準。Logistic Regression 通常具較好的機率校準性，但資料分布改變時仍應重新檢查。
 
 錯誤分析與緩解策略
 --------------------------------------
@@ -332,206 +355,8 @@ docker run -p 8501:8501 sms-spam-app:latest
 - 對於生產流量，建議將模型以 API（例如 FastAPI）方式提供，並放置在反向代理/負載平衡器後方；Streamlit 適合展示與內部檢視，但非高吞吐量的生產服務。
 - 加入驗證與流量限制（rate limiting）以保護模型端點；避免未受控地將模型暴露於公網。
 - 考慮非同步處理與請求批次化以提升吞吐效能。
+<img width="1906" height="912" alt="image" src="https://github.com/user-attachments/assets/c9eaf999-e7df-46dc-92eb-61d8b6bcbc26" />
 
-CI/CD 與 OpenSpec 驗證
------------------------------------
-建議的 CI 步驟（使用 GitHub Actions 為例）：
-
-1. 取出程式碼（checkout）。
-2. 設定 Python 環境並安裝相依套件（`requirements.txt`）。
-3. 執行 `openspec validate --strict` 以確認規格變更是否正確。
-4. 執行針對 `preprocessing.py` 的單元測試及載入模型的 smoke test（簡單推論測試）。
-5. 選擇性地執行小型 notebook 端到端測試。
-
-範例 GitHub Actions（概念性）：
-
-```yaml
-name: CI
-on: [push, pull_request]
-jobs:
-	test:
-		runs-on: ubuntu-latest
-		steps:
-			- uses: actions/checkout@v3
-			- uses: actions/setup-python@v4
-				with:
-					python-version: 3.10
-			- run: pip install -r requirements.txt
-			- run: openspec validate --strict || true
-			- run: pytest -q
-			- run: python -c "import joblib; joblib.load('models/logreg_pipeline.joblib')" || echo 'model missing'
-```
-
-使用 OpenSpec 管理本作業
----------------------------------
-
-本專案以 OpenSpec 作為規格與變更流程控制工具。以下為建議的實作與協作流程，能讓作業變更、CI 驗證、與審查更具可追溯性與一致性。
-
-核心原則
-
-- 所有影響專案行為或介面的變更（包括前處理規則、模型工件格式、API/介面變更、或 CI 設定），應以 OpenSpec 變更提案（change proposal）描述、提交與審查。
-- 變更提案與規格存放於 `openspec/` 標準目錄：`openspec/project.md`、`openspec/specs/`、以及 `openspec/changes/`。
-
-快速上手（本地開發）
-
-1. 撰寫變更提案目錄：
-
-	 - 建立目錄 `openspec/changes/<YYYY-MM-DD>-short-name/`。
-	 - 在該目錄新增 `proposal.md`（摘要、目的、影響範圍、關聯檔案）與 `tasks.md`（要做的步驟）。
-
-	 範例資料夾結構：
-
-	 ```text
-	 openspec/
-		 changes/
-			 2025-10-28-add-openspec-ci/
-				 proposal.md
-				 tasks.md
-		 specs/
-			 ci/spec.md
-		 project.md
-	 ```
-
-2. proposal.md 範本（建議欄位）
-
-	 - 標題（title）：一句話說明變更。
-	 - 摘要（summary）：簡短描述變更內容與原因。
-	 - 影響（impact）：列出會被修改或影響的檔案與模組（e.g., `app.py`, `train.py`, `models/manifest.json`）。
-	 - 測試策略（tests）：說明如何在本地或 CI 驗證變更（例如 `pytest`、`openspec validate`、載入模型 smoke test）。
-	 - 風險與回滾（risk/rollback）：若變更失敗，如何回滾或關閉功能。
-
-	 小範例（proposal.md）：
-
-	 ```md
-	 # 標題
-	 新增 CI 階段以執行 `openspec validate --strict`
-
-	 ## 摘要
-	 在 CI 中加入 OpenSpec 驗證步驟，確保每次 PR 提交都會通過規格校驗。
-
-	 ## 影響
-	 - 修改: .github/workflows/ci.yml
-	 - 新增: openspec/specs/ci/spec.md
-
-	 ## 測試
-	 - 本地執行 `openspec validate --strict` 應回傳成功 (exit code 0)。
-
-	 ## 回滾
-	 - 若驗證造成阻擋，可先在 CI 暫時註解該步驟並通知 maintainers。
-	 ```
-
-3. 在本地驗證 OpenSpec 提案
-
-	 - 安裝或使用專案環境中可用的 `openspec` CLI（若尚未安裝，請參閱團隊或 OpenSpec 文件）。
-	 - 執行：
-
-	 ```powershell
-	 openspec validate --strict
-	 ```
-
-	 - 若發現錯誤，根據 CLI 回饋修改 `openspec/changes/...` 或 `openspec/specs/...`，直到通過驗證。
-
-CI 與合併流程建議
-
-- 在 GitHub Actions（或其他 CI）中加入 `openspec validate --strict` 作為必要檢查。若規格驗證失敗，阻擋 PR 合併，並回報錯誤訊息以利修正。
-- PR 標題與描述應包含變更 ID（例如 `openspec change: 2025-10-28-add-openspec-ci`），並在 PR template 中要求連結到 `openspec/changes/<id>/proposal.md`。
-- 指派至少一名規格審查者（spec reviewer）來檢視 proposal.md 與 tasks.md。規格審查可與程式碼審查協同進行。
-
-如何在 README 中記錄規格關聯
-
-- 若變更牽涉模型工件格式或 API，請在 README 的 "模型匯出、工件佈局與版本管理" 區段加入 spec 連結或 manifest 範例，讓使用者與 CI 可追蹤版本。
-- 範例：在 `models/manifest.json` 中加入 `spec_change_id` 欄位，指向採用之 OpenSpec 變更，例如：
-
-```json
-{
-	"model_version": "v0.1.0",
-	"spec_change_id": "2025-10-28-add-openspec-ci"
-}
-```
-
-推薦 reviewer 與合併檢查清單
-
-1. 變更提案語意是否清楚（summary、impact、tests）？
-2. 是否已在本地執行 `openspec validate` 並通過？
-3. 有沒有對 README、specs、或模型 manifest 做同步更新？
-4. CI workflow 是否已包含 `openspec validate`，且對失敗有明確回饋？
-
-範例 CI 片段（將 `openspec validate` 設為必要步驟）
-
-```yaml
-- name: OpenSpec validate
-	run: openspec validate --strict
-```
-
-進階建議
-
-- 將 `openspec/changes/` 的變更 ID 與 Git 分支或 PR 進行一對一綁定（例如使用分支命名規則 `change/<id>-short`），以便快速追溯。
-- 在 PR merge 時，將已批准的 change id 加入 `models/CHANGELOG.md` 與 `models/manifest.json`，確保模型與規格是同步的。
-- 若希望強化可追溯性，可把 `openspec validate` 的輸出（或狀態）貼至 PR 的 comment（或 CI artifact），以利審查者確認。
-
-結語
-
-使用 OpenSpec 能把規格變更流程化、機械化（CI 驗證）與可追溯化（changes 與 manifest）。我已在本 README 加入範例模板與 CI 片段；若要我直接替某個待辦項（例如新增 CI workflow 或建立 change proposal 範例檔）建立 PR，我可以立即協助實作並在 CI 上驗證通過。
-
-可重現性與環境說明
---------------------------------------------
-環境
-
-- 建議 Python 版本：3.8 以上。專案包含 `requirements.txt` 以列出所需套件。
-- 若需精確重現結果，請使用 `pip freeze > requirements-lock.txt` 鎖定套件版本，並與模型工件一併保存。
-
-實驗 manifest
-
-建議在模型旁存放一份 JSON manifest，包含資料路徑、git commit、隨機種子、超參數與訓練時間，例如 `models/manifest.json`：
-
-```json
-{
-	"model_version": "v0.1.0",
-	"git_commit": "<commit-hash>",
-	"dataset": "sms_spam_clean.csv",
-	"seed": 42,
-	"tfidf": {"ngram_range": [1,1], "min_df": 2},
-	"clf": {"C": 1.0, "penalty": "l2"},
-	"trained_at": "2025-10-28T12:34:56Z"
-}
-```
-
-監控、記錄與維護
-----------------------------------
-監控指標建議：
-
-- 每小時／每日的 spam 機率分布統計（aggregate spam-probability distribution）。
-- 被預測為 spam 的訊息比例與趨勢。
-- 模型 API 錯誤率與延遲（latency）指標。
-
-維護工作：
-
-- 視資料漂移情況設定定期重訓（每週或每月）。
-- 建立即時或離線的標註流程，讓人工審查不確定或高影響力樣本。
-
-倫理與資料隱私
--------------------------------------
-隱私指引：
-
-- 除非必要且獲得同意，避免在日誌中存儲原始訊息文字；須記錄時應使用雜湊或遮蔽來保護個資。
-- 確保訓練資料中的 PII（個人可識別資訊）之處理符合當地法令與政策。
-
-偏差與公平性：
-
-- 垃圾郵件偵測可能對特定語言或地區造成不公平影響，建議在可能的情況下做分群（例如語言）性能評估。
-- 在執行阻擋（block）或刪除等高風險自動化決策時採保守閾值，優先採以人工審查為主之流程。
-
-限制與未來改進
-----------------------------------
-目前做法的限制：
-
-- TF-IDF + Logistic Regression 對於高度偽裝或新型態垃圾郵件可能表現不足。
-- 詞彙庫會隨時間成長，建議在長期系統中採用詞彙裁剪或增量式向量器重訓策略。
-
-未來改進方向：
-
-- 評估輕量 transformer（如 DistilBERT / TinyBERT）以提升 recall，在可接受的成本下提升效能。
-- 建置主動學習回圈（active learning），針對不確定或困難範例自動標註與增量訓練。
 
 附錄 — 指令、範例輸出與工件說明
 ---------------------------------------------------------
@@ -571,18 +396,6 @@ Actual spam            98             649
 模型工件註記
 
 - `models/logreg_pipeline.joblib` 包含向量器與分類器；載入：`pipe = joblib.load(path)`，推論：`pipe.predict([text])`、`pipe.predict_proba([text])`。
-
-聯絡與後續擴充建議
-----------------------
-若需以下擴充功能，我可以替您以 PR 或提交方式加入：
-
-1. 匯出分別的向量器與分類器工件，並新增 smoke test 檔案以驗證載入與推論。
-2. 新增 GitHub Actions workflow，包含 `openspec validate --strict`、`pytest` 與模型 smoke test。
-3. 產出 `requirements-lock.txt`（鎖定套件版本）並加入 `models/manifest.json` 描述當前工件。
-
-結語
------------
-此 README 已擴充為完整且可重現的技術報告，記錄了簡訊垃圾郵件分類器之設計、訓練、評估、匯出與部署流程。若希望在任一章節加入更詳細內容（例如完整交叉驗證日誌、係數表或一套可直接執行的 Docker + GitHub Actions workflow），請告訴我欲擴充之區塊，我會繼續補齊。
 
 ---
 
