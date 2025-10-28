@@ -9,6 +9,8 @@
 - `app.py` — Streamlit 示範應用（互動式儀表板）。
 - `requirements.txt` — Python 相依套件清單。
 - `sms_spam_no_header.csv` — 範例或原始資料（使用者需放置於專案根目錄）。
+-  `sms_spam_clean.csv` - 清洗後的資料集
+-  `hw3_spam_classification.ipynb` - 資料前處理、訓練、和儲存模型之完整流程
 
 作業分成階段：
 1. 前處理（Preprocessing）
